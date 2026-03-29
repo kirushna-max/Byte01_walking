@@ -43,9 +43,13 @@ def kutta_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   # ------------------------------------------------------------------
   cfg.scene.entities = {"robot": get_kutta_robot_cfg()}
 
-  # Increase contact buffer for complex terrain.
-  cfg.sim.mujoco.ccd_iterations = 500
-  cfg.sim.contact_sensor_maxmatch = 500
+  # ccd_iterations: EPA buffer = nconmax(100) × num_envs(1024) × (10 + 2×ccd_iters) × 12B
+  # ccd=200  → 0.50 GB  (too low, likely triggers convergence warning)
+  # ccd=500  → 1.24 GB  ✅ good balance: high enough to avoid warning, leaves ~4.7 GB free
+  # ccd=1000 → 2.47 GB  (marginal — leaves little headroom for Warp model state)
+  # ccd=2000 → 4.93 GB  ❌ OOM with 1024 envs
+  cfg.sim.mujoco.ccd_iterations = 1000
+  cfg.sim.contact_sensor_maxmatch = 200  
 
   # ------------------------------------------------------------------
   # Raycast terrain sensor – attach frame to Kutta base body.
@@ -212,10 +216,10 @@ def kutta_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg = kutta_rough_env_cfg(play=play)
 
   # Flat terrain needs fewer contacts – reduce sim buffers for speed.
-  cfg.sim.njmax = 300
-  cfg.sim.mujoco.ccd_iterations = 50
-  cfg.sim.contact_sensor_maxmatch = 64
-  cfg.sim.nconmax = None
+  cfg.sim.njmax = 600
+  cfg.sim.mujoco.ccd_iterations = 200
+  cfg.sim.contact_sensor_maxmatch = 128
+  cfg.sim.nconmax = 500
 
   # Switch to infinite flat plane.
   assert cfg.scene.terrain is not None

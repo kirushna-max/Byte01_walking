@@ -403,7 +403,9 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
     name="terrain_scan",
     frame=ObjRef(type="body", name="", entity="robot"),  # Centered at robot base (set per-robot).
     ray_alignment="yaw", # Rays rotate with yaw, but not pitch/roll.
-    pattern=GridPatternCfg(size=(1.6, 1.0), resolution=0.1), # Density of ray grid.
+    # Resolution coarsened from 0.1 → 0.2 m to reduce hfield rows/cols and
+    # avoid "height field collision overflow" (≥50 pairs) in MuJoCo.
+    pattern=GridPatternCfg(size=(1.6, 1.0), resolution=0.2),
     max_distance=5.0,
     exclude_parent_body=True,
     debug_vis=True,
@@ -415,11 +417,13 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
       terrain=TerrainImporterCfg(
         terrain_type="generator",
         terrain_generator=replace(ROUGH_TERRAINS_CFG),
-        max_init_terrain_level=5,
+        max_init_terrain_level=10,
       ),
       sensors=(terrain_scan,),
-      num_envs=4096,
-      extent=2.0,
+      # EPA VRAM cost = naccdmax × (16 + 7×ccd_iters) × 12B, naccdmax = nconmax × num_envs.
+      # 256 envs × ccd=1000 → EPA = 25600 × 7016 × 12 ≈ 2.16 GB  (same as 512×ccd=500)
+      # But 2× more CCD iterations per contact → fewer convergence warnings.
+      num_envs=256,
     ),
     observations=observations,
     actions=actions,
@@ -433,12 +437,17 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
       entity_name="robot",
       body_name="",  # Follow robot base body.
       distance=3.0,
-      elevation=-5.0,
+      elevation=-30.0,
       azimuth=90.0,
     ),
     sim=SimulationCfg(
-      nconmax=35, # Max MuJoCo contacts
-      njmax=1500, # Max MuJoCo constraints
+      # IMPORTANT: in mujoco-warp, naccdmax = nconmax × num_envs.
+      # The EPA convex buffer is shaped (naccdmax, 10 + 2*ccd_iterations).
+      # nconmax=2000 × 256 envs × ccd_iterations=5000 → ~61 GB (OOM on 6 GB GPU).
+      # nconmax=100 × 256 envs × ccd_iterations=200 → ~126 MB (safe).
+      # 100 contacts/env comfortably exceeds the ≥50 hfield overflow threshold.
+      nconmax=100,
+      njmax=300,
       mujoco=MujocoCfg(
         timestep=0.005, # Sim physics timestep
         iterations=10,

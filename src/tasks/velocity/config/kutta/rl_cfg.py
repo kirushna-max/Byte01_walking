@@ -39,7 +39,7 @@ def kutta_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       clip_param=0.2,
       entropy_coef=0.01,         # Encourage exploration early
       num_learning_epochs=5,
-      num_mini_batches=4,
+      num_mini_batches=8,        # 1024 envs × 24 steps / 8 = 3072 samples/batch → GPU-saturating
       learning_rate=1.0e-3,
       schedule="adaptive",       # Adjusts lr based on KL divergence
       gamma=0.99,
