@@ -32,12 +32,12 @@ from mjlab.utils.spec_config import CollisionCfg
 
 ##
 # MJCF and assets.
-# The kutta.xml lives alongside go2.xml in the same xmls/ directory.
-# Its STL meshes are stored in xmls/assets/ (same folder Go2 meshes use).
+# The kutta.xml lives in the kutta/xmls/ directory.
+# Its STL meshes are stored in kutta/xmls/assets/.
 ##
 
 KUTTA_XML: Path = (
-  SRC_PATH / "assets" / "robots" / "unitree_go2" / "xmls" / "kutta.xml"
+  SRC_PATH / "assets" / "robots" / "kutta" / "xmls" / "kutta.xml"
 )
 assert KUTTA_XML.exists(), f"kutta.xml not found at {KUTTA_XML}"
 
@@ -45,7 +45,7 @@ assert KUTTA_XML.exists(), f"kutta.xml not found at {KUTTA_XML}"
 def get_assets(meshdir: str) -> dict[str, bytes]:
   """Load Kutta STL mesh bytes from the local assets/ directory."""
   assets: dict[str, bytes] = {}
-  # Assets live in the same 'assets/' folder as the Go2 meshes.
+  # Assets live in the 'assets/' folder relative to the XML.
   update_assets(assets, KUTTA_XML.parent / "assets", meshdir)
   return assets
 
