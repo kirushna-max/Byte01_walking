@@ -45,6 +45,7 @@ class Ps5PlayConfig:
   joystick_index: int = 0
   left_x_axis: int = 0
   left_y_axis: int = 1
+  right_x_axis: int = 2
   left_x_mode: Literal["strafe", "yaw"] = "strafe"
   max_lin_x: float = 1.0
   max_lin_y: float = 1.0
@@ -83,6 +84,7 @@ class Ps5Controller:
     print(
       "[PS5] Left stick: "
       f"Y -> lin_x (+forward), X -> {cfg.left_x_mode}; "
+      f"right X -> yaw; "
       f"deadzone={cfg.deadzone}"
     )
 
@@ -93,17 +95,20 @@ class Ps5Controller:
     self._pygame.event.pump()
     left_x = self._axis(self._cfg.left_x_axis)
     left_y = self._axis(self._cfg.left_y_axis)
+    right_x = self._axis(self._cfg.right_x_axis)
+    left_x = -left_x
     if self._cfg.invert_left_y:
       left_y = -left_y
 
     lin_x = self._shape(left_y) * self._cfg.max_lin_x
-    horizontal = self._shape(left_x)
+    left_horizontal = self._shape(left_x)
+    right_horizontal = self._shape(right_x)
     if self._cfg.left_x_mode == "strafe":
-      lin_y = horizontal * self._cfg.max_lin_y
-      yaw = 0.0
+      lin_y = left_horizontal * self._cfg.max_lin_y
+      yaw = right_horizontal * self._cfg.max_yaw
     else:
       lin_y = 0.0
-      yaw = horizontal * self._cfg.max_yaw
+      yaw = left_horizontal * self._cfg.max_yaw
     return lin_x, lin_y, yaw
 
   def _axis(self, axis_id: int) -> float:
@@ -119,6 +124,19 @@ class Ps5Controller:
     return max(-1.0, min(1.0, scaled)) * (1.0 if value > 0.0 else -1.0)
 
 
+def configure_manual_velocity_command(command_cfg: Any) -> None:
+  if hasattr(command_cfg, "heading_command"):
+    command_cfg.heading_command = False
+  if hasattr(command_cfg, "ranges") and hasattr(command_cfg.ranges, "heading"):
+    command_cfg.ranges.heading = None
+  if hasattr(command_cfg, "rel_heading_envs"):
+    command_cfg.rel_heading_envs = 0.0
+  if hasattr(command_cfg, "rel_standing_envs"):
+    command_cfg.rel_standing_envs = 0.0
+  if hasattr(command_cfg, "resampling_time_range"):
+    command_cfg.resampling_time_range = (1.0e9, 1.0e9)
+
+
 class Ps5CommandOverride:
   def __init__(self, env: Any, controller: Ps5Controller, command_name: str):
     self._env = env
@@ -128,14 +146,7 @@ class Ps5CommandOverride:
 
     cfg = getattr(self._term, "cfg", None)
     if cfg is not None:
-      if hasattr(cfg, "heading_command"):
-        cfg.heading_command = False
-      if hasattr(cfg, "rel_heading_envs"):
-        cfg.rel_heading_envs = 0.0
-      if hasattr(cfg, "rel_standing_envs"):
-        cfg.rel_standing_envs = 0.0
-      if hasattr(cfg, "resampling_time_range"):
-        cfg.resampling_time_range = (1.0e9, 1.0e9)
+      configure_manual_velocity_command(cfg)
 
   def update(self) -> None:
     lin_x, lin_y, yaw = self._controller.read_cmd_vel()
@@ -204,14 +215,7 @@ def run_play(task_id: str, cfg: Ps5PlayConfig):
     )
 
   command_cfg = env_cfg.commands[cfg.command_name]
-  if hasattr(command_cfg, "heading_command"):
-    command_cfg.heading_command = False
-  if hasattr(command_cfg, "rel_heading_envs"):
-    command_cfg.rel_heading_envs = 0.0
-  if hasattr(command_cfg, "rel_standing_envs"):
-    command_cfg.rel_standing_envs = 0.0
-  if hasattr(command_cfg, "resampling_time_range"):
-    command_cfg.resampling_time_range = (1.0e9, 1.0e9)
+  configure_manual_velocity_command(command_cfg)
 
   is_tracking_task = "motion" in env_cfg.commands and isinstance(
     env_cfg.commands["motion"], MotionCommandCfg
