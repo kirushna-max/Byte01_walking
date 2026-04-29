@@ -27,7 +27,24 @@ from src import SRC_PATH
 from mjlab.actuator import BuiltinPositionActuatorCfg
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
 from mjlab.utils.actuator import ElectricActuator, reflected_inertia
-from mjlab.utils.os import update_assets
+# update_assets is not present in this version of mjlab; implement locally.
+def _update_assets(
+  assets: dict,
+  assets_dir: "Path",
+  meshdir: str,
+) -> None:
+  """Load every file in *assets_dir* into *assets* keyed as MuJoCo expects.
+
+  MuJoCo resolves mesh files relative to *meshdir* (the value of
+  ``spec.meshdir``). We therefore key each asset as
+  ``<meshdir>/<filename>`` so the spec can locate them.
+  """
+  if not assets_dir.is_dir():
+    return
+  for filepath in assets_dir.iterdir():
+    if filepath.is_file():
+      key = f"{meshdir}/{filepath.name}" if meshdir else filepath.name
+      assets[key] = filepath.read_bytes()
 from mjlab.utils.spec_config import CollisionCfg
 
 ##
@@ -46,7 +63,7 @@ def get_assets(meshdir: str) -> dict[str, bytes]:
   """Load Kutta STL mesh bytes from the local assets/ directory."""
   assets: dict[str, bytes] = {}
   # Assets live in the 'assets/' folder relative to the XML.
-  update_assets(assets, KUTTA_XML.parent / "assets", meshdir)
+  _update_assets(assets, KUTTA_XML.parent / "assets", meshdir)
   return assets
 
 

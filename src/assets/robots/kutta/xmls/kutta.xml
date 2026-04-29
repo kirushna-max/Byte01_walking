@@ -5,7 +5,7 @@
   <!-- meshdir: path to the STL mesh files -->
   <!-- autolimits: automatically clamp control signals to actuator limits -->
   <!-- meshdir points to the local assets/ folder (STL files copied alongside this XML) -->
-  <compiler angle="radian" meshdir="assets/" autolimits="true"/>
+  <compiler angle="radian" meshdir="../meshes/" autolimits="true"/>
 
   <!-- ================== SIMULATION OPTIONS ================== -->
   <!-- timestep: integration step in seconds (5 ms is standard for legged robots) -->
@@ -57,6 +57,8 @@
   <!-- ================== WORLD BODY ================== -->
   <!-- The simulation kinematic tree. All bodies, joints, and geoms live here. -->
   <worldbody>
+    <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 5" dir="0 0 -1" />
+    <geom name="floor" type="plane" pos="0 0 0" size="0 0 1" rgba="0.8 0.9 0.8 1"/>
 
     <!-- ================== BASE LINK (Main Torso) ================== -->
     <!-- pos: initial spawn height — legs are ~0.27 m below base, so 0.3 m clears ground -->

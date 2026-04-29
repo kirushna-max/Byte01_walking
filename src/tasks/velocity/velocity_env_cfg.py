@@ -25,7 +25,10 @@ from mjlab.sensor import GridPatternCfg, ObjRef, RayCastSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
-from mjlab.terrains import TerrainImporterCfg
+try:
+  from mjlab.terrains import TerrainEntityCfg
+except ImportError:
+  from mjlab.terrains import TerrainImporterCfg as TerrainEntityCfg
 from mjlab.terrains.config import ROUGH_TERRAINS_CFG
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
@@ -226,12 +229,10 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
     # Domain Randomization: Randomizes ground friction at startup for sim-to-real transfer.
     "foot_friction": EventTermCfg(
       mode="startup",
-      func=mdp.randomize_field,
-      domain_randomization=True,
+      func=mdp.dr.geom_friction,
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=()),  # Set per-robot.
         "operation": "abs",
-        "field": "geom_friction",
         "ranges": (0.3, 1.2),
         "shared_random": True,  # All foot geoms share the same friction.
       },
@@ -239,7 +240,7 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
     # Domain Randomization: Adds constant biases to joint encoder readings.
     "encoder_bias": EventTermCfg(
       mode="startup",
-      func=mdp.randomize_encoder_bias,
+      func=mdp.dr.encoder_bias,
       params={
         "asset_cfg": SceneEntityCfg("robot"),
         "bias_range": (-0.015, 0.015),
@@ -248,12 +249,10 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
     # Domain Randomization: Shifts the center of mass randomly to simulate payload/hardware mismatch.
     "base_com": EventTermCfg(
       mode="startup",
-      func=mdp.randomize_field,
-      domain_randomization=True,
+      func=mdp.dr.body_ipos,
       params={
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
-        "field": "body_ipos",
         "ranges": {
           0: (-0.05, 0.05),
           1: (-0.05, 0.05),
@@ -414,7 +413,7 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
 
   return ManagerBasedRlEnvCfg(
     scene=SceneCfg(
-      terrain=TerrainImporterCfg(
+      terrain=TerrainEntityCfg(
         terrain_type="generator",
         terrain_generator=replace(ROUGH_TERRAINS_CFG),
         max_init_terrain_level=10,

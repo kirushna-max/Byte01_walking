@@ -1,0 +1,390 @@
+<mujoco model="kutta">
+
+  <!-- ================== COMPILER SETTINGS ================== -->
+  <!-- angle: joint limit/range values are in radians -->
+  <!-- meshdir: "." → STL files live alongside this XML in the meshes/ folder -->
+  <!-- autolimits: automatically clamp control signals to actuator limits -->
+  <compiler angle="radian" meshdir="." autolimits="true"/>
+
+  <!-- ================== SIMULATION OPTIONS ================== -->
+  <!-- timestep : 5 ms — standard for legged locomotion -->
+  <!-- gravity  : 9.81 m/s² downward (−Z) -->
+  <!-- solver   : Newton — more accurate for contact-rich locomotion -->
+  <!-- iterations/tolerance : balance speed vs. accuracy -->
+  <!-- impratio : improves contact stability (soft contacts) -->
+  <option timestep="0.005"
+          gravity="0 0 -9.81"
+          solver="Newton"
+          iterations="100"
+          tolerance="1e-10"
+          impratio="1"/>
+
+  <!-- ================== CONTACT PARAMETERS ================== -->
+  <!-- nconmax / njmax: upper bounds on contacts and constraints per step.     -->
+  <!-- These match kutta_flat_env_cfg values (nconmax=500, njmax=600).         -->
+  <!-- For a single-robot ROS env both values are more than sufficient.        -->
+  <size nconmax="500" njmax="600"/>
+
+  <!-- ================== DEFAULTS ================== -->
+  <!--
+    Physics that was previously injected at runtime via kutta_constants.py:
+      • joint damping  : 0.5  N·m·s/rad  (BuiltinPositionActuatorCfg.damping)
+      • joint armature : 0.005 kg·m²     (BuiltinPositionActuatorCfg.armature)
+      • joint frictionloss stays 0.01 (original XML value)
+      • visual geoms   : no collision, group 2
+      • collision geoms: condim=6 (allows full friction cone, matching CollisionCfg condim=6)
+      • foot (knee) geom contact params baked in under <default class="foot_collision">
+  -->
+  <default>
+    <default class="kutta">
+
+      <!-- Visual geoms: pure display, zero density, no collision.              -->
+      <!-- Handled by contype=0 conaffinity=0.                                  -->
+      <!-- Foot knee meshes override this on their individual <geom> blocks.    -->
+      <!-- density=0: mass comes from <inertial> tags, not from geom volume.    -->
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2" density="0"
+              rgba="0.79216 0.81961 0.93333 1"/>
+      </default>
+
+      <!-- Generic collision primitive geoms (capsules on hips, thighs, base). -->
+      <!-- These supplement the visual mesh contact, hidden in group 3.         -->
+      <!-- condim=6: full friction for all body links.                          -->
+      <default class="collision">
+        <geom priority="1" condim="6" group="3" contype="1" conaffinity="1"
+              friction="1.0 0.005 0.0001"/>
+      </default>
+
+      <!-- Foot (knee) collision geoms -->
+      <!-- condim=6 → full 6-DOF friction cone (tangential + torsional)        -->
+      <!-- friction=(0.6, 0.005, 0.0001) → sliding / torsional / rolling        -->
+      <!-- solimp=(0.9, 0.95, 0.023) → soft contact from CollisionCfg           -->
+      <!-- contype=1, conaffinity=1 → active on both sides                      -->
+      <default class="foot_collision">
+        <geom priority="1" condim="6" group="3"
+              contype="1" conaffinity="1"
+              friction="0.6 0.005 0.0001"
+              solimp="0.9 0.95 0.023"/>
+      </default>
+
+      <!-- Sites: small red spheres for sensor attachment, hidden in group 5 -->
+      <site rgba="1 0 0 1" size="0.015" group="5"/>
+
+      <!--
+        Joint defaults (applied to every joint unless overridden):
+          damping=0.5  → from BuiltinPositionActuatorCfg.damping in kutta_constants.py
+          armature=0.005 → from BuiltinPositionActuatorCfg.armature in kutta_constants.py
+          frictionloss=0.01 → kept from original kutta.xml
+      -->
+      <joint damping="0.5" frictionloss="0.01" armature="0.005"/>
+
+      <!--
+        Position actuator defaults:
+          kp=20        → from XML and kutta_constants.py stiffness=20.0
+          forcerange=−10…10 N·m → effort_limit=10.0 from kutta_constants.py
+      -->
+      <position kp="20" forcerange="-10 10"/>
+
+    </default>
+  </default>
+
+  <!-- ================== ASSETS ================== -->
+  <!-- STL mesh files must live in the same directory as this XML file. -->
+  <asset>
+    <mesh name="base_link" content_type="model/stl" file="base_link.STL"/>
+    <mesh name="hip1"      content_type="model/stl" file="hip1.STL"/>
+    <mesh name="thigh1"    content_type="model/stl" file="thigh1.STL"/>
+    <mesh name="knee1"     content_type="model/stl" file="knee1.STL"/>
+    <mesh name="hip2"      content_type="model/stl" file="hip2.STL"/>
+    <mesh name="thigh2"    content_type="model/stl" file="thigh2.STL"/>
+    <mesh name="knee2"     content_type="model/stl" file="knee2.STL"/>
+    <mesh name="hip3"      content_type="model/stl" file="hip3.STL"/>
+    <mesh name="thigh3"    content_type="model/stl" file="thigh3.STL"/>
+    <mesh name="knee3"     content_type="model/stl" file="knee3.STL"/>
+    <mesh name="hip4"      content_type="model/stl" file="hip4.STL"/>
+    <mesh name="thigh4"    content_type="model/stl" file="thigh4.STL"/>
+    <mesh name="knee4"     content_type="model/stl" file="knee4.STL"/>
+  </asset>
+
+  <!-- ================== WORLD BODY ================== -->
+  <worldbody>
+    <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2"
+           pos="0 0 5" dir="0 0 -1"/>
+    <!--
+      Floor: high-friction, zero-slippage ground plane.
+        friction=(2.0, 0.5, 0.1)  → very high sliding / torsional / rolling
+        condim=6                  → full 6-DOF friction cone
+        solimp=(0.99, 0.999, 0.001) → near-rigid contact (minimal penetration)
+        solref=(0.002, 1)         → 2 ms contact time constant (stiff)
+        contype=0, conaffinity=1  → terrain receives contacts from all robot links
+    -->
+    <geom name="floor" type="plane" pos="0 0 0" size="0 0 1"
+          rgba="0.8 0.9 0.8 1"
+          friction="2.0 0.5 0.1"
+          condim="6"
+          solimp="0.99 0.999 0.001"
+          solref="0.002 1"
+          contype="0" conaffinity="1"/>
+
+    <!-- ================== BASE LINK (Torso) ================== -->
+    <!-- Spawned at 0.5 m so the robot settles without tunnelling. -->
+    <body name="base_link" pos="0 0 0.5" childclass="kutta">
+
+      <!-- freejoint: 6-DoF floating base (remove if using fixed-base URDF launch) -->
+      <freejoint name="floating_base"/>
+
+      <inertial pos="0 0 0" mass="1.2" diaginertia="0.012 0.025 0.030"/>
+
+      <!-- Visual mesh (no collision) -->
+      <geom name="base_link" mesh="base_link" class="visual"/>
+
+      <!-- Collision capsule for the torso (non-foot: condim=1) -->
+      <geom name="base_collision" type="capsule" size="0.08 0.15"
+            pos="0 0 0" class="collision"/>
+
+      <!-- IMU sensor site (centre of torso) -->
+      <site name="imu" pos="0 0 0" class="kutta"/>
+
+      <!-- ================== LEG 1 – Front-Left ================== -->
+      <body name="hip1" pos="0.199 0.14 0.083">
+        <inertial pos="-0.0541 -0.0032112 3.7763e-05"
+                  quat="0.710984 -0.0101736 -0.0137251 0.703001"
+                  mass="0.17061" diaginertia="0.000125726 8.87391e-05 7.9306e-05"/>
+        <!-- revolute1: hip abduction/adduction (X-axis) -->
+        <joint name="revolute1" pos="0 0 0" axis="1 0 0"
+               range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+        <geom name="hip1" mesh="hip1" class="visual"/>
+        <geom name="hip1_collision" type="capsule" size="0.03 0.04"
+              pos="-0.03 0.05 0" class="collision"/>
+
+        <body name="thigh1" pos="-0.06295 0.09625 -5.7702e-05">
+          <inertial pos="-0.043844 -0.024483 -0.032581"
+                    quat="0.628507 0.311638 0.322239 0.635628"
+                    mass="0.41837" diaginertia="0.00127605 0.00117315 0.000175136"/>
+          <!-- revolute2: hip flexion/extension (Y-axis) -->
+          <joint name="revolute2" pos="0 0 0" axis="0 1 0"
+                 range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+          <geom name="thigh1" mesh="thigh1" class="visual"/>
+          <geom name="thigh1_collision" type="capsule" size="0.03 0.08"
+                pos="-0.09 -0.01 -0.07" class="collision"/>
+
+          <body name="knee1" pos="-0.17634 -0.0095 -0.13155">
+            <inertial pos="0.10909 0.0040043 -0.063464"
+                      quat="0.352996 0.613161 0.612693 0.352184"
+                      mass="0.11838" diaginertia="0.000418161 0.000407576 1.51933e-05"/>
+            <!-- revolute3: knee flexion (-Y axis) -->
+            <joint name="revolute3" pos="0 0 0" axis="0 -1 0"
+                   range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+            <geom name="knee1" mesh="knee1" class="visual" contype="1" conaffinity="1"
+              friction="0.6 0.005 0.0001" solimp="0.9 0.95 0.023"/>
+            <!-- Foot contact (knee mesh acts as foot): full friction + soft contact -->
+            <geom name="knee1_collision" type="sphere" size="0.025"
+                  pos="0.20 0 -0.12" class="foot_collision"/>
+            <site name="FL" pos="0.20 0 -0.12" class="kutta"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- ================== LEG 2 – Rear-Left ================== -->
+      <body name="hip2" pos="-0.221 0.14 0.083">
+        <inertial pos="-0.0541 -0.0032112 3.7763e-05"
+                  quat="0.710984 -0.0101736 -0.0137251 0.703001"
+                  mass="0.17061" diaginertia="0.000125726 8.87391e-05 7.9306e-05"/>
+        <joint name="revolute4" pos="0 0 0" axis="1 0 0"
+               range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+        <geom name="hip2" mesh="hip2" class="visual"/>
+        <geom name="hip2_collision" type="capsule" size="0.03 0.04"
+              pos="-0.03 0.05 0" class="collision"/>
+
+        <body name="thigh2" pos="-0.06295 0.09625 -5.7702e-05">
+          <inertial pos="-0.043844 -0.024483 -0.032581"
+                    quat="0.628507 0.311638 0.322239 0.635628"
+                    mass="0.41837" diaginertia="0.00127605 0.00117315 0.000175136"/>
+          <joint name="revolute5" pos="0 0 0" axis="0 1 0"
+                 range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+          <geom name="thigh2" mesh="thigh2" class="visual"/>
+          <geom name="thigh2_collision" type="capsule" size="0.03 0.08"
+                pos="-0.09 -0.01 -0.07" class="collision"/>
+
+          <body name="knee2" pos="-0.17634 -0.0095 -0.13155">
+            <inertial pos="0.10909 0.0040043 -0.063464"
+                      quat="0.352996 0.613161 0.612693 0.352184"
+                      mass="0.11838" diaginertia="0.000418161 0.000407576 1.51933e-05"/>
+            <joint name="revolute6" pos="0 0 0" axis="0 -1 0"
+                   range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+            <geom name="knee2" mesh="knee2" class="visual" contype="1" conaffinity="1"
+                  friction="0.6 0.005 0.0001" solimp="0.9 0.95 0.023"/>
+            <geom name="knee2_collision" type="sphere" size="0.025"
+                  pos="0.20 0 -0.12" class="foot_collision"/>
+            <site name="RL" pos="0.20 0 -0.12" class="kutta"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- ================== LEG 3 – Front-Right ================== -->
+      <body name="hip3" pos="0.199 -0.14 0.083">
+        <inertial pos="-0.0541 0.0032112 3.7763e-05"
+                  quat="0.703001 -0.0137251 -0.0101736 0.710984"
+                  mass="0.17061" diaginertia="0.000125726 8.87391e-05 7.9306e-05"/>
+        <joint name="revolute7" pos="0 0 0" axis="1 0 0"
+               range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+        <geom name="hip3" mesh="hip3" class="visual"/>
+        <geom name="hip3_collision" type="capsule" size="0.03 0.04"
+              pos="-0.03 -0.05 0" class="collision"/>
+
+        <body name="thigh3" pos="-0.06295 -0.09625 -5.7702e-05">
+          <inertial pos="-0.043844 0.024483 -0.032581"
+                    quat="0.635628 0.322239 0.311638 0.628507"
+                    mass="0.41837" diaginertia="0.00127605 0.00117315 0.000175136"/>
+          <joint name="revolute8" pos="0 0 0" axis="0 -1 0"
+                 range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+          <geom name="thigh3" mesh="thigh3" class="visual"/>
+          <geom name="thigh3_collision" type="capsule" size="0.03 0.08"
+                pos="-0.09 0.01 -0.07" class="collision"/>
+
+          <body name="knee3" pos="-0.17634 0.0095 -0.13155">
+            <inertial pos="0.10909 -0.0040043 -0.063464"
+                      quat="0.352184 0.612693 0.613161 0.352996"
+                      mass="0.11838" diaginertia="0.000418161 0.000407576 1.51933e-05"/>
+            <joint name="revolute9" pos="0 0 0" axis="0 1 0"
+                   range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+            <geom name="knee3" mesh="knee3" class="visual" contype="1" conaffinity="1"
+                  friction="0.6 0.005 0.0001" solimp="0.9 0.95 0.023"/>
+            <geom name="knee3_collision" type="sphere" size="0.025"
+                  pos="0.20 0 -0.12" class="foot_collision"/>
+            <site name="FR" pos="0.20 0 -0.12" class="kutta"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- ================== LEG 4 – Rear-Right ================== -->
+      <body name="hip4" pos="-0.221 -0.14 0.083">
+        <inertial pos="-0.0541 0.0032112 3.7763e-05"
+                  quat="0.703001 -0.0137251 -0.0101736 0.710984"
+                  mass="0.17061" diaginertia="0.000125726 8.87391e-05 7.9306e-05"/>
+        <joint name="revolute10" pos="0 0 0" axis="1 0 0"
+               range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+        <geom name="hip4" mesh="hip4" class="visual"/>
+        <geom name="hip4_collision" type="capsule" size="0.03 0.04"
+              pos="-0.03 -0.05 0" class="collision"/>
+
+        <body name="thigh4" pos="-0.06295 -0.09625 -5.7702e-05">
+          <inertial pos="-0.043844 0.024483 -0.032581"
+                    quat="0.635628 0.322239 0.311638 0.628507"
+                    mass="0.41837" diaginertia="0.00127605 0.00117315 0.000175136"/>
+          <joint name="revolute11" pos="0 0 0" axis="0 -1 0"
+                 range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+          <geom name="thigh4" mesh="thigh4" class="visual"/>
+          <geom name="thigh4_collision" type="capsule" size="0.03 0.08"
+                pos="-0.09 0.01 -0.07" class="collision"/>
+
+          <body name="knee4" pos="-0.17634 0.0095 -0.13155">
+            <inertial pos="0.10909 -0.0040043 -0.063464"
+                      quat="0.352184 0.612693 0.613161 0.352996"
+                      mass="0.11838" diaginertia="0.000418161 0.000407576 1.51933e-05"/>
+            <joint name="revolute12" pos="0 0 0" axis="0 1 0"
+                   range="-3.14 3.14" actuatorfrcrange="-10 10"/>
+            <geom name="knee4" mesh="knee4" class="visual" contype="1" conaffinity="1"
+                  friction="0.6 0.005 0.0001" solimp="0.9 0.95 0.023"/>
+            <geom name="knee4_collision" type="sphere" size="0.025"
+                  pos="0.20 0 -0.12" class="foot_collision"/>
+            <site name="RR" pos="0.20 0 -0.12" class="kutta"/>
+          </body>
+        </body>
+      </body>
+
+    </body>
+  </worldbody>
+
+  <!-- ================== ACTUATORS ================== -->
+  <!--
+    Position actuators (PD-like) for all 12 joints.
+    All physics from kutta_constants.py is now in <default>:
+      kp=20, forcerange=±10 Nm, damping/armature set on joints.
+    kv (derivative gain) is set to the damping ratio: kv = damping = 0.5
+  -->
+  <actuator>
+    <!-- Leg 1 – Front-Left -->
+    <position name="act_revolute1"  joint="revolute1"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute2"  joint="revolute2"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute3"  joint="revolute3"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <!-- Leg 2 – Rear-Left -->
+    <position name="act_revolute4"  joint="revolute4"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute5"  joint="revolute5"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute6"  joint="revolute6"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <!-- Leg 3 – Front-Right -->
+    <position name="act_revolute7"  joint="revolute7"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute8"  joint="revolute8"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute9"  joint="revolute9"  kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <!-- Leg 4 – Rear-Right -->
+    <position name="act_revolute10" joint="revolute10" kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute11" joint="revolute11" kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+    <position name="act_revolute12" joint="revolute12" kp="20" kv="0.5" forcerange="-10 10" ctrlrange="-3.14 3.14"/>
+  </actuator>
+
+  <!-- ================== SENSORS ================== -->
+  <!--
+    All sensors from original kutta.xml preserved.
+    gyro / velocimeter / accelerometer: IMU at the torso site.
+    jointpos / jointvel: proprioception (12 joints each).
+    actuatorfrc: torque feedback (noise=0.001 N·m).
+    touch: foot contact detection at FL/RL/FR/RR sites.
+    subtreeangmom: angular momentum reward signal.
+  -->
+  <sensor>
+    <!-- IMU -->
+    <gyro          name="imu_ang_vel"  site="imu"/>
+    <velocimeter   name="imu_lin_vel"  site="imu"/>
+    <accelerometer name="imu_lin_acc"  site="imu"/>
+    <subtreeangmom name="root_angmom"  body="base_link"/>
+
+    <!-- Joint positions -->
+    <jointpos name="q_revolute1"  joint="revolute1"/>
+    <jointpos name="q_revolute2"  joint="revolute2"/>
+    <jointpos name="q_revolute3"  joint="revolute3"/>
+    <jointpos name="q_revolute4"  joint="revolute4"/>
+    <jointpos name="q_revolute5"  joint="revolute5"/>
+    <jointpos name="q_revolute6"  joint="revolute6"/>
+    <jointpos name="q_revolute7"  joint="revolute7"/>
+    <jointpos name="q_revolute8"  joint="revolute8"/>
+    <jointpos name="q_revolute9"  joint="revolute9"/>
+    <jointpos name="q_revolute10" joint="revolute10"/>
+    <jointpos name="q_revolute11" joint="revolute11"/>
+    <jointpos name="q_revolute12" joint="revolute12"/>
+
+    <!-- Joint velocities -->
+    <jointvel name="dq_revolute1"  joint="revolute1"/>
+    <jointvel name="dq_revolute2"  joint="revolute2"/>
+    <jointvel name="dq_revolute3"  joint="revolute3"/>
+    <jointvel name="dq_revolute4"  joint="revolute4"/>
+    <jointvel name="dq_revolute5"  joint="revolute5"/>
+    <jointvel name="dq_revolute6"  joint="revolute6"/>
+    <jointvel name="dq_revolute7"  joint="revolute7"/>
+    <jointvel name="dq_revolute8"  joint="revolute8"/>
+    <jointvel name="dq_revolute9"  joint="revolute9"/>
+    <jointvel name="dq_revolute10" joint="revolute10"/>
+    <jointvel name="dq_revolute11" joint="revolute11"/>
+    <jointvel name="dq_revolute12" joint="revolute12"/>
+
+    <!-- Actuator torque feedback -->
+    <actuatorfrc name="tau_revolute1"  actuator="act_revolute1"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute2"  actuator="act_revolute2"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute3"  actuator="act_revolute3"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute4"  actuator="act_revolute4"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute5"  actuator="act_revolute5"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute6"  actuator="act_revolute6"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute7"  actuator="act_revolute7"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute8"  actuator="act_revolute8"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute9"  actuator="act_revolute9"  noise="0.001"/>
+    <actuatorfrc name="tau_revolute10" actuator="act_revolute10" noise="0.001"/>
+    <actuatorfrc name="tau_revolute11" actuator="act_revolute11" noise="0.001"/>
+    <actuatorfrc name="tau_revolute12" actuator="act_revolute12" noise="0.001"/>
+
+    <!-- Foot contact forces -->
+    <touch name="contact_FL" site="FL"/>
+    <touch name="contact_RL" site="RL"/>
+    <touch name="contact_FR" site="FR"/>
+    <touch name="contact_RR" site="RR"/>
+  </sensor>
+
+</mujoco>

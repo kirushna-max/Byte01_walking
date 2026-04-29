@@ -1,0 +1,30 @@
+# rl_mjlab — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Core simulation & RL ──────────────────────────────────────────────────────
+mujoco                   # MuJoCo physics engine Python bindings
+torch                    # PyTorch (install the CUDA variant manually if needed)
+numpy                    # Numerical arrays
+
+# ── RL framework (mjlab / rsl-rl) ────────────────────────────────────────────
+# mjlab and rsl-rl are installed as local/editable packages; add their
+# source paths to PYTHONPATH or install them with `pip install -e .`
+# rsl-rl                 # on-policy RL runner (bundled inside mjlab)
+
+# ── CLI & config ─────────────────────────────────────────────────────────────
+tyro                     # CLI / dataclass config parser (used in train.py & play.py)
+
+# ── Visualisation ────────────────────────────────────────────────────────────
+viser                    # Web-based 3-D viewer backend (ViserPlayViewer)
+
+# ── Experiment tracking ───────────────────────────────────────────────────────
+wandb                    # Weights & Biases logging + checkpoint download
+
+# ── Multi-GPU training ────────────────────────────────────────────────────────
+torchrunx                # Multi-node/multi-GPU launcher (optional, only for multi-GPU)
+
+# ── Hardware / CAN bus (Kutta robot deployment) ───────────────────────────────
+python-can               # CAN bus interface (can_runtime.py, ak60_v3_control.py)
+
+# ── Data & utilities ─────────────────────────────────────────────────────────
+pyyaml                   # YAML serialisation (dump_yaml in mjlab utils)

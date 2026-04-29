@@ -14,6 +14,10 @@ Usage:
 
 import os
 import sys
+
+# Ensure the rl_mjlab root (parent of this scripts/ dir) is on the path
+# so that `src` and other local packages are importable.
+sys.path.insert(0, str(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -215,9 +219,18 @@ def run_play(task_id: str, cfg: PlayConfig):
     runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
     runner = runner_cls(env, asdict(agent_cfg), device=device)
     runner.load(
-      str(resume_path), load_cfg={"actor": True}, strict=True, map_location=device
+      str(resume_path), load_cfg={"actor": True}, strict=False, map_location=device
     )
     policy = runner.get_inference_policy(device=device)
+    try:
+      import importlib.util as _ilu
+      _monitor_path = Path(__file__).with_name("Monitor.py")
+      _spec = _ilu.spec_from_file_location("Monitor", _monitor_path)
+      _mod = _ilu.module_from_spec(_spec)  # type: ignore[arg-type]
+      _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+      policy = _mod.attach_monitor_hook(policy, env)
+    except Exception as _monitor_err:
+      print(f"[Monitor] Hook not attached: {_monitor_err}")
 
   # Handle "auto" viewer selection.
   if cfg.viewer == "auto":

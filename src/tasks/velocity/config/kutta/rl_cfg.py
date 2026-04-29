@@ -21,16 +21,12 @@ def kutta_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       hidden_dims=(512, 256, 128),
       activation="elu",
       obs_normalization=True,
-      stochastic=True,
-      init_noise_std=1.0,  # Start with high exploration noise.
     ),
     # Critic network: value estimator (privileged info, never deployed).
     critic=RslRlModelCfg(
       hidden_dims=(512, 256, 128),
       activation="elu",
       obs_normalization=True,
-      stochastic=False,
-      init_noise_std=1.0,
     ),
     # PPO hyperparameters — identical to Go2 as a safe starting point.
     algorithm=RslRlPpoAlgorithmCfg(
